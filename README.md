@@ -1,13 +1,21 @@
-# Spot Gloss Studio for Mac
+# Spot Gloss Studio
 
-One HTML file. Open in Safari. Affine Place SVG (last row `[0 0 1]`), Pen cleanup, raised UV plates.
+One board for Mac Safari and Windows Chrome. Site: https://spot-gloss-studio.vercel.app
 
-## Open in Safari (email this)
+Do not email a .html file. Safari will show source. Send the website.
 
-https://cdn.jsdelivr.net/gh/TwistinTerps/spot-gloss-studio@main/Spot-Gloss-Studio.html
+Place SVG keeps Illustrator cubics. Image Trace is a draft. Pen owns the plate. Export Plates → zip in Downloads.
 
-Or download: https://github.com/TwistinTerps/spot-gloss-studio/raw/main/Spot-Gloss-Studio.html
+## Canvas debug (Safari)
 
-Right-click → Open With → Safari if macOS blocks it.
+Open https://spot-gloss-studio.vercel.app/?debug=1 or press ` (backtick) on the board.
 
-Place SVG keeps Illustrator cubics. Image Trace is a draft. Export Plates → zip in Downloads.
+The overlay reports:
+- draw ms and peak (green < 8, amber < 16, red over budget)
+- paint fps of real requestAnimationFrame draws (idle should be 0 after the last gesture)
+- art vs pack path counts and dense traces (>80 anchors)
+- hit-test count and ms on the identity 8×8 ctx
+- Retina backing store vs the 3840px Safari cliff
+- undo / redo snapshot depth
+
+Then Safari → Develop → Show Web Inspector → Timelines. Record a pan, pinch, or Image Trace. Read Layout & Rendering (green paint of `#view`) and JavaScript & Events → Call Trees → Inverted for `draw` / `walk` / `hitSilhouette`.
