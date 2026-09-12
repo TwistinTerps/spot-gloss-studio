@@ -151,7 +151,7 @@ label input,label select{width:100%;margin-top:3px;background:var(--bg);color:va
     <label>Corners <span id="corners-lab" style="color:var(--muted)">1.35 pt</span>
       <input type="range" id="corners" min="0.4" max="4" step="0.1" value="1.35">
     </label>
-    <p class="note">RDP ε on Trace only. Place SVG keeps cubics (C S Q T A) and fits the board.</p>
+    <p class="note">Place: affine 2×3 (last row [0 0 1]). RDP is Trace only.</p>
     <label>Noise <input type="range" id="noise" min="4" max="80" value="16"></label>
     <label class="check"><input type="checkbox" id="blur" checked> Smooth before trace</label>
     <label class="check"><input type="checkbox" id="ignore-white" checked> Ignore white</label>
@@ -167,7 +167,7 @@ label input,label select{width:100%;margin-top:3px;background:var(--bg);color:va
       </select>
     </label>
     <button class="ghost" data-act="reverse" style="width:100%;margin:4px 0;border:1px solid var(--line);border-radius:8px;padding:8px">Reverse path direction</button>
-    <p class="note">Even-odd punches holes on any extra contour. Nonzero uses CCW + / CW −. Reverse so Expand grows the right way.</p>
+    <p class="note">Place is affine: last row [0 0 1], cubics stay cubics, kiss-cut parallels stay. Rotate about a point = T(c)·R·T(−c). det=ad−bc. ÷w only if projective — then Pen the edge.</p>
     <h3>View</h3>
     <label class="check"><input type="checkbox" id="raised" checked> Raised UV</label>
     <label class="check"><input type="checkbox" id="seps"> Separations</label>
@@ -516,6 +516,164 @@ label input,label select{width:100%;margin-top:3px;background:var(--bg);color:va
     }
   })();
 
+  function matFromDom(m){ return [m.a,m.b,m.c,m.d,m.e,m.f]; }
+  function matDet(m){ return m[0]*m[3]-m[1]*m[2]; }
+  var svgImportStats={flipped:0,skipped:0,perspective:0,behind:0,affine:0};
+  var W_INF=1e-12, W_AFFINE=1e-8;
+  function resetSvgImportStats(){ svgImportStats.flipped=0; svgImportStats.skipped=0; svgImportStats.perspective=0; svgImportStats.behind=0; svgImportStats.affine=0; }
+  function hasDM(){ return typeof DOMMatrix!=="undefined" && typeof DOMPoint!=="undefined"; }
+  function matMul(A,B){
+    if(hasDM()){ try{ const r=new DOMMatrix(A).multiply(new DOMMatrix(B)); return matFromDom(r); }catch(e){} }
+    return [A[0]*B[0]+A[2]*B[1], A[1]*B[0]+A[3]*B[1], A[0]*B[2]+A[2]*B[3], A[1]*B[2]+A[3]*B[3], A[0]*B[4]+A[2]*B[5]+A[4], A[1]*B[4]+A[3]*B[5]+A[5]];
+  }
+  function isDomXf(m){ return m && typeof m==="object" && typeof m.transformPoint==="function"; }
+  function asMat(m){ return m && m.length===6 ? m : matFromDom(m); }
+  function asDom(m){
+    if(!hasDM()) return null;
+    try{ return isDomXf(m) ? m : new DOMMatrix(m); }catch(e){ return null; }
+  }
+  function isProjectiveXf(m){
+    const dm=asDom(m); if(!dm||dm.is2D) return false;
+    return Math.abs(dm.m14)>W_AFFINE||Math.abs(dm.m24)>W_AFFINE||Math.abs(dm.m34)>W_AFFINE||Math.abs(dm.m44-1)>W_AFFINE;
+  }
+  function projectHom(x,y,w){
+    if(!Number.isFinite(w)||Math.abs(w)<W_INF) return null;
+    const out=Math.abs(w-1)>W_AFFINE?{x:x/w,y:y/w,w:w}:{x:x,y:y,w:w};
+    if(!Number.isFinite(out.x)||!Number.isFinite(out.y)) return null;
+    return out;
+  }
+  function matApply(m,x,y){
+    const p=applyPoint(m,x,y); return p?{x:p.x,y:p.y}:{x:x,y:y};
+  }
+  function applyPoint(m,x,y){
+    const dm=asDom(m);
+    if(dm){
+      try{
+        const p=dm.transformPoint(new DOMPoint(x,y,0,1));
+        return projectHom(p.x,p.y,p.w);
+      }catch(e){}
+    }
+    const a=asMat(m);
+    return {x:a[0]*x+a[2]*y+a[4], y:a[1]*x+a[3]*y+a[5], w:1};
+  }
+  function parseTransform(attr){
+    let m=[1,0,0,1,0,0]; if(!attr) return m;
+    const re=/(matrix3d|matrix|translate|scale|rotate|skewX|skewY)\s*\(([^)]*)\)/gi; let match;
+    while((match=re.exec(attr))){
+      const kind=match[1].toLowerCase(); const nums=(match[2].match(/[+-]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][+-]?\d+)?/g)||[]).map(Number);
+      let t=[1,0,0,1,0,0];
+      if(kind==="matrix"&&nums.length>=6) t=[nums[0],nums[1],nums[2],nums[3],nums[4],nums[5]];
+      else if(kind==="matrix3d"&&nums.length>=16) t=[nums[0],nums[1],nums[4],nums[5],nums[12],nums[13]];
+      else if(kind==="translate") t=[1,0,0,1,nums[0]||0,nums[1]||0];
+      else if(kind==="scale"){ const sx=nums[0]??1; t=[sx,0,0,nums[1]??sx,0,0]; }
+      else if(kind==="rotate"){ const a=(nums[0]||0)*Math.PI/180,c=Math.cos(a),s=Math.sin(a),cx=nums[1]||0,cy=nums[2]||0; t=matMul(matMul([1,0,0,1,cx,cy],[c,s,-s,c,0,0]),[1,0,0,1,-cx,-cy]); }
+      else if(kind==="skewx") t=[1,0,Math.tan(((nums[0]||0)*Math.PI)/180),1,0,0];
+      else if(kind==="skewy") t=[1,Math.tan(((nums[0]||0)*Math.PI)/180),0,1,0,0];
+      m=matMul(m,t);
+    }
+    return m;
+  }
+  function parseCssTransform(raw){
+    const s=(raw||"").trim(); if(!s||s==="none") return [1,0,0,1,0,0];
+    if(hasDM()){ try{ return matFromDom(new DOMMatrix(s)); }catch(e){} }
+    const mm=s.match(/matrix3d\s*\(([^)]+)\)/i)||s.match(/matrix\s*\(([^)]+)\)/i);
+    if(mm){
+      const nums=(mm[1].match(/[+-]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][+-]?\d+)?/g)||[]).map(Number);
+      if(/matrix3d/i.test(mm[0])&&nums.length>=16) return [nums[0],nums[1],nums[4],nums[5],nums[12],nums[13]];
+      if(nums.length>=6) return [nums[0],nums[1],nums[2],nums[3],nums[4],nums[5]];
+    }
+    return parseTransform(s);
+  }
+  function elementBBox(el){
+    if(typeof el.getBBox!=="function") return {x:0,y:0,width:0,height:0};
+    try{ const b=el.getBBox(); return {x:b.x,y:b.y,width:b.width,height:b.height}; }catch(e){ return {x:0,y:0,width:0,height:0}; }
+  }
+  function parseOriginPair(raw, bbox){
+    const named={left:0,top:0,center:0.5,right:1,bottom:1};
+    const parts=(raw||"50% 50%").trim().split(/\s+/);
+    const one=(token,base,size)=>{
+      const t=(token||"").toLowerCase();
+      if(t in named) return base+named[t]*size;
+      if(t.indexOf("%")>=0) return base+(parseFloat(t)/100)*size;
+      const n=parseFloat(t); return Number.isFinite(n)?base+n:base+0.5*size;
+    };
+    return {x:one(parts[0]||"50%", bbox.x, bbox.width), y:one(parts[1]||parts[0]||"50%", bbox.y, bbox.height)};
+  }
+  function localTransform(el){
+    const style=el.getAttribute && el.getAttribute("style")||"";
+    const m=/(?:^|;)\s*transform\s*:\s*([^;]+)/i.exec(style);
+    let css=parseCssTransform(m&&m[1]);
+    if(!(css[0]===1&&css[1]===0&&css[2]===0&&css[3]===1&&css[4]===0&&css[5]===0)){
+      const om=/(?:^|;)\s*transform-origin\s*:\s*([^;]+)/i.exec(style);
+      const o=parseOriginPair(om&&om[1], elementBBox(el));
+      css=matMul(matMul([1,0,0,1,o.x,o.y], css), [1,0,0,1,-o.x,-o.y]);
+      return css;
+    }
+    return parseTransform(el.getAttribute && el.getAttribute("transform"));
+  }
+  function accumulatedTransform(el){
+    const chain=[]; let n=el;
+    while(n){ chain.push(n); const p=n.parentElement; if(!p) break; if(p.tagName && p.tagName.toLowerCase()==="svg"){ chain.push(p); break; } n=p; }
+    chain.reverse(); let m=[1,0,0,1,0,0];
+    chain.forEach(e=>{ m=matMul(m, localTransform(e)); });
+    return m;
+  }
+  function ctmOf(el){
+    if(typeof el.getCTM!=="function") return null;
+    try{ const ctm=el.getCTM(); return ctm||null; }catch(e){ return null; }
+  }
+  function matrixForElement(el){ return ctmOf(el)||accumulatedTransform(el); }
+  function mountSvgForCtm(doc){
+    if(typeof document==="undefined"||!document.body) return function(){};
+    const svg=doc.documentElement; if(!svg||svg.tagName.toLowerCase()!=="svg") return function(){};
+    const vb=(svg.getAttribute("viewBox")||"").trim().split(/[\s,]+/);
+    if(vb.length===4 && !svg.getAttribute("width")){ svg.setAttribute("width", vb[2]); svg.setAttribute("height", vb[3]); }
+    const host=document.createElement("div");
+    host.style.cssText="position:fixed;left:-12000px;top:0;width:0;height:0;overflow:hidden;opacity:0;pointer-events:none";
+    const parent=svg.parentNode; host.appendChild(svg); document.body.appendChild(host);
+    return function(){ host.remove(); if(parent) parent.appendChild(svg); };
+  }
+  function skipContour(){ svgImportStats.skipped+=1; return null; }
+  function mapNode(m,n){
+    const p=applyPoint(m,n.x,n.y), i=applyPoint(m,n.ix,n.iy), o=applyPoint(m,n.ox,n.oy);
+    if(!p||!i||!o) return null;
+    return {node:{x:p.x,y:p.y,ix:i.x,iy:i.y,ox:o.x,oy:o.y,type:n.type}, w:[p.w,i.w,o.w]};
+  }
+  function applyMatToContour(c,m){
+    const ident=m&&typeof m.isIdentity==="boolean"?m.isIdentity:(m[0]===1&&m[1]===0&&m[2]===0&&m[3]===1&&m[4]===0&&m[5]===0);
+    if(ident){ svgImportStats.affine+=1; return c; }
+    const two=m&&typeof m.a==="number"?matFromDom(m):m;
+    const det=matDet(two);
+    if(!Number.isFinite(det)||Math.abs(det)<W_INF) return skipContour();
+    const nodes=[];
+    let persp=isProjectiveXf(m), behind=false;
+    for(let i=0;i<c.nodes.length;i++){
+      const mapped=mapNode(m, c.nodes[i]);
+      if(!mapped) return skipContour();
+      if(mapped.w.some(function(w){ return w<0; })) behind=true;
+      if(mapped.w.some(function(w){ return Math.abs(w-1)>W_AFFINE; })) persp=true;
+      nodes.push(mapped.node);
+    }
+    if(behind){ svgImportStats.behind+=1; return skipContour(); }
+    if(persp) svgImportStats.perspective+=1;
+    else svgImportStats.affine+=1;
+    const out={closed:c.closed, nodes:nodes};
+    if(det<0 && out.closed && out.nodes.length>1){ out.nodes=reverseContour(out.nodes); svgImportStats.flipped+=1; }
+    return out;
+  }
+  function svgPlaceExtra(){
+    const bits=[];
+    if(svgImportStats.affine) bits.push(svgImportStats.affine+" affine (parallels kept)");
+    if(svgImportStats.flipped) bits.push(svgImportStats.flipped+" mirrored (reversed)");
+    if(svgImportStats.perspective) bits.push(svgImportStats.perspective+" left affine chart (÷w)");
+    if(svgImportStats.behind) bits.push(svgImportStats.behind+" behind camera skipped");
+    if(svgImportStats.skipped) bits.push(svgImportStats.skipped+" degenerate skipped");
+    return bits.length?" · "+bits.join(" · "):"";
+  }
+  function extractSvgMarkup(text){
+    const lower=(text||"").toLowerCase(); const i=lower.indexOf("<svg"); if(i<0) return null;
+    const j=lower.lastIndexOf("</svg>"); return j<0?text.slice(i):text.slice(i,j+6);
+  }
   function svgArcToCubics(x1,y1,rx,ry,phiDeg,large,sweep,x2,y2){
     const cubics=[];
     if(!rx||!ry||(x1===x2&&y1===y2)){ cubics.push({x1:x1,y1:y1,x2:x2,y2:y2,x:x2,y:y2}); return cubics; }
@@ -636,10 +794,13 @@ label input,label select{width:100%;margin-top:3px;background:var(--bg);color:va
     const doc=new DOMParser().parseFromString(svgText,"image/svg+xml");
     if(doc.querySelector("parsererror")) return [];
     const els=[...doc.querySelectorAll("path, rect, circle, ellipse, polygon, polyline")];
+    const unmount=mountSvgForCtm(doc);
+    try{
+    resetSvgImportStats();
     const packed=[];
     els.forEach(el=>{
       if((el.getAttribute("display")||"").toLowerCase()==="none") return;
-      const contours=contoursFromSvgEl(el).filter(c=>c.nodes.length);
+      const contours=contoursFromSvgEl(el).filter(c=>c.nodes.length).map(c=>applyMatToContour(c, matrixForElement(el))).filter(Boolean);
       if(!contours.length) return;
       const style=el.getAttribute("style")||"";
       const fr=(el.getAttribute("fill-rule")||"").toLowerCase();
@@ -657,7 +818,10 @@ label input,label select{width:100%;margin-top:3px;background:var(--bg);color:va
       });
     });
     return paths;
+    } finally { unmount(); }
   }
+
+
 
 
   function draw(){
@@ -728,6 +892,7 @@ label input,label select{width:100%;margin-top:3px;background:var(--bg);color:va
       if(p.plate==="uv" && !p.closed) items.push(["warn","Open Spot UV path — close it"]);
       if(p.text) items.push(["warn","Live type — Expand before varnish"]);
     });
+    if(svgImportStats.perspective) items.push(["warn","Left affine chart (w ≠ 1) — parallels can meet at infinity. Pen the hero edge"]);
     if(state.template && !state.paths.some(p=>p.plate==="uv")) items.push(["warn","Template only. Raster cannot be a varnish plate."]);
     if(abArea && uvBox/abArea>0.4) items.push(["warn","UV coverage over 40%"]);
     if(!items.length) items.push(["ok", state.paths.length?"Vectors look press-legal at current settings":"Empty artboard"]);
@@ -787,7 +952,7 @@ label input,label select{width:100%;margin-top:3px;background:var(--bg);color:va
           snapshot();
           state.paths=state.paths.concat(imported);
           state.selected=imported.slice(0,1).map(p=>p.id);
-          setMsg("Placed "+imported.length+" SVG path(s) · cubics kept · fitted to board");
+          setMsg("Placed "+imported.length+" SVG path(s) · cubics kept · fitted to board"+svgPlaceExtra());
           inspect(); draw();
         }catch(err){ setMsg("Could not read that SVG"); }
       };
@@ -1085,12 +1250,16 @@ ${new Date().toISOString()}
   canvas.addEventListener("drop", onDrop);
   window.addEventListener("paste", e=>{
     const t=e.target; if(t && (t.tagName==="INPUT"||t.tagName==="TEXTAREA"||t.tagName==="SELECT")) return;
-    const items=e.clipboardData && e.clipboardData.items; if(!items) return;
+    const cd=e.clipboardData; if(!cd) return;
+    const markup=extractSvgMarkup(cd.getData("text/plain")||cd.getData("text/html")||"");
+    if(markup){ e.preventDefault(); const imported=importSvgDocument(markup, state.plate, state.artboard); if(!imported.length){ setMsg("No path data in that SVG"); return; } snapshot(); state.paths=state.paths.concat(imported); state.selected=imported.slice(0,1).map(p=>p.id); setMsg("Placed "+imported.length+" SVG path(s) · cubics kept · fitted to board"+svgPlaceExtra()); inspect(); draw(); return; }
+    if(cd.files && cd.files.length){ e.preventDefault(); placeFile(cd.files[0]); return; }
+    const items=cd.items; if(!items) return;
     for(const item of items){
-      if(item.type && (item.type.indexOf("image/")===0 || item.type==="image/svg+xml")){
-        const f=item.getAsFile(); if(f){ e.preventDefault(); placeFile(f); setMsg("Pasted image · Safari sandbox (no folder access)"); }
-        return;
-      }
+      if(item.type==="image/svg+xml"){ const f=item.getAsFile(); if(f){ e.preventDefault(); placeFile(f); } return; }
+    }
+    for(const item of items){
+      if(item.type && item.type.indexOf("image/")===0){ const f=item.getAsFile(); if(f){ e.preventDefault(); placeFile(f); setMsg("Pasted image · Image Trace, then Pen the hero edges"); } return; }
     }
   });
   document.getElementById("bar").addEventListener("click", e=>{ const a=e.target.closest("[data-act]"); if(a&&a.dataset.act) act(a.dataset.act); });
