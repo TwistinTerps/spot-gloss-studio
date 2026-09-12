@@ -16,6 +16,7 @@ html,body{height:100%;background:var(--bg);color:var(--fg);font:12px/1.4 -apple-
 #bar{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:5px 8px;background:var(--surface);border-bottom:1px solid var(--line)}
 #bar button,.tool{background:transparent;color:var(--fg);border:1px solid transparent;border-radius:8px;padding:6px 8px;cursor:pointer;min-height:32px}
 #bar button:hover,.tool:hover{background:var(--elev)}
+#bar button:disabled{opacity:.35;pointer-events:none}
 .sep{width:1px;height:16px;background:var(--line);margin:0 4px}
 #wrap{display:grid;grid-template-columns:56px 1fr 280px;height:calc(100% - 72px)}
 @media(max-width:720px){#wrap{grid-template-columns:1fr} .left,.rightp{display:none} #mbar{display:flex} #bar{display:none}}
@@ -62,8 +63,8 @@ label input,label select{width:100%;margin-top:3px;background:var(--bg);color:va
 <nav id="bar">
   <button data-act="place">Place</button>
   <button data-act="trace">Image Trace</button>
-  <button data-act="undo">Undo</button>
-  <button data-act="redo">Redo</button>
+  <button data-act="undo" disabled>Undo</button>
+  <button data-act="redo" disabled>Redo</button>
   <span class="sep"></span>
   <button data-act="expand">Expand</button>
   <button data-act="outline">Outline Stroke</button>
@@ -235,11 +236,45 @@ label input,label select{width:100%;margin-top:3px;background:var(--bg);color:va
     return {id:uid(),plate,closed:true,compound:false,visible:true,locked:false,fill:"#000",stroke:"#000",sw:0,overprint:plate!=="print",text:null,fillRule:"evenodd",nodes:[node(x,y),node(x+w,y),node(x+w,y+h),node(x,y+h)]};
   }
 
-  const state={tool:"select",plate:"uv",zoom:1.4,pan:{x:48,y:40},space:false,artboard:{...PRESETS.sticker},preset:"sticker",jobId:"",paths:[],selected:[],selectedNode:null,draft:null,history:[],future:[],raised:true,seps:false,outline:false,showtmpl:true,snap:true,grid:false,template:null,tmplOp:0.42,tmplImg:null};
+  const state={tool:"select",plate:"uv",zoom:1.4,pan:{x:48,y:40},space:false,artboard:{...PRESETS.sticker},preset:"sticker",jobId:"",paths:[],selected:[],selectedNode:null,draft:null,history:[],future:[],raised:true,seps:false,outline:false,showtmpl:true,snap:true,grid:false,template:null,tmplOp:0.42,tmplImg:null,packaging:null};
 
-  function snapshot(){state.history.push(JSON.stringify(state.paths)); if(state.history.length>80) state.history.shift(); state.future=[];}
-  function undo(){if(!state.history.length)return; state.future.push(JSON.stringify(state.paths)); state.paths=JSON.parse(state.history.pop()); state.draft=null; draw(); inspect();}
-  function redo(){if(!state.future.length)return; state.history.push(JSON.stringify(state.paths)); state.paths=JSON.parse(state.future.pop()); draw(); inspect();}
+  function snapshot(){
+    const snap=JSON.stringify({paths:state.paths,artboard:state.artboard,packaging:state.packaging,preset:state.preset,jobId:state.jobId});
+    if(state.history.length && state.history[state.history.length-1]===snap) return;
+    state.history.push(snap);
+    if(state.history.length>80) state.history.shift();
+    state.future=[];
+    const ub=document.querySelectorAll('[data-act="undo"]'); ub.forEach(b=>b.disabled=!state.history.length);
+    const rb=document.querySelectorAll('[data-act="redo"]'); rb.forEach(b=>b.disabled=!state.future.length);
+  }
+  function restoreSnap(s){
+    state.paths=s.paths||[];
+    if(s.artboard) state.artboard=s.artboard;
+    if(s.packaging!==undefined) state.packaging=s.packaging;
+    if(s.preset) state.preset=s.preset;
+    if(s.jobId!==undefined) state.jobId=s.jobId;
+    state.draft=null; state.selected=[];
+  }
+  function undo(){
+    if(!state.history.length){ setMsg("Nothing to undo"); return; }
+    const current=JSON.stringify({paths:state.paths,artboard:state.artboard,packaging:state.packaging,preset:state.preset,jobId:state.jobId});
+    state.future.push(current);
+    restoreSnap(JSON.parse(state.history.pop()));
+    setMsg("Undo");
+    const ub=document.querySelectorAll('[data-act="undo"]'); ub.forEach(b=>b.disabled=!state.history.length);
+    const rb=document.querySelectorAll('[data-act="redo"]'); rb.forEach(b=>b.disabled=!state.future.length);
+    draw(); inspect();
+  }
+  function redo(){
+    if(!state.future.length){ setMsg("Nothing to redo"); return; }
+    const current=JSON.stringify({paths:state.paths,artboard:state.artboard,packaging:state.packaging,preset:state.preset,jobId:state.jobId});
+    state.history.push(current);
+    restoreSnap(JSON.parse(state.future.pop()));
+    setMsg("Redo");
+    const ub=document.querySelectorAll('[data-act="undo"]'); ub.forEach(b=>b.disabled=!state.history.length);
+    const rb=document.querySelectorAll('[data-act="redo"]'); rb.forEach(b=>b.disabled=!state.future.length);
+    draw(); inspect();
+  }
   function setMsg(t){document.getElementById("smsg").textContent=t;}
   function persist(){
     if(!storageOn) return;
@@ -1148,7 +1183,7 @@ ${new Date().toISOString()}
     if(name==="welcome") document.getElementById("welcome").style.display="flex";
   }
 
-  let last=null, mode=null, start=null, draftShape=null, handleKind=null;
+  let last=null, mode=null, start=null, draftShape=null, handleKind=null, snapOnce=false;
   canvas.addEventListener("pointerdown", e=>{
     canvas.setPointerCapture(e.pointerId);
     const pt=worldFromEvent(e); last=pt;
@@ -1178,13 +1213,14 @@ ${new Date().toISOString()}
         else { h.node.type="smooth"; h.node.ix=h.node.x+(prev.x-h.node.x)/3; h.node.iy=h.node.y+(prev.y-h.node.y)/3; h.node.ox=h.node.x+(next.x-h.node.x)/3; h.node.oy=h.node.y+(next.y-h.node.y)/3; }
         draw(); return;
       }
-      mode=h.handle?"edithandle":(h.node?"nodedrag":"movedrag"); snapshot();
+      mode=h.handle?"edithandle":(h.node?"nodedrag":"movedrag"); snapOnce=true;
     } else { state.selected=[]; state.selectedNode=null; handleKind=null; }
     inspect();
     draw();
   });
   canvas.addEventListener("pointermove", e=>{
     const pt=worldFromEvent(e); if(!last) return;
+    if(snapOnce && (mode==="edithandle"||mode==="nodedrag"||mode==="movedrag"||mode==="handle")){ snapshot(); snapOnce=false; }
     if(mode==="pan"){ state.pan.x+=(pt.x-last.x)*state.zoom; state.pan.y+=(pt.y-last.y)*state.zoom; draw(); return; }
     if(mode==="shape" && start){
       const make=state.tool==="rect"?rect:ell;
@@ -1216,11 +1252,11 @@ ${new Date().toISOString()}
   });
   window.addEventListener("pointerup", ()=>{
     if(mode==="shape" && state.draft){ snapshot(); state.paths.push(state.draft); state.selected=[state.draft.id]; state.draft=null; inspect(); }
-    mode=null; last=null; start=null; handleKind=null; draw();
+    mode=null; last=null; start=null; handleKind=null; snapOnce=false; draw();
   });
   window.addEventListener("pointercancel", ()=>{
     if(mode==="shape" && state.draft){ snapshot(); state.paths.push(state.draft); state.selected=[state.draft.id]; state.draft=null; inspect(); }
-    mode=null; last=null; start=null; handleKind=null; draw();
+    mode=null; last=null; start=null; handleKind=null; snapOnce=false; draw();
   });
   canvas.addEventListener("wheel", e=>{ e.preventDefault(); state.zoom=Math.min(8,Math.max(0.2,state.zoom*(e.deltaY<0?1.08:0.92))); draw(); }, {passive:false});
   window.addEventListener("keydown", e=>{
