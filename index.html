@@ -4,12 +4,209 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="color-scheme" content="dark" />
+<meta name="theme-color" content="#0B0F14" />
 <title>Spot Gloss Studio</title>
-<style>html,body{margin:0;height:100%;background:#0B0F14;color:#EDEDEF;font:13px/1.4 -apple-system,BlinkMacSystemFont,sans-serif;display:flex;align-items:center;justify-content:center}</style>
-<script>location.replace("./Spot-Gloss-Studio.html");</script>
+<style>
+:root{--bg:#0B0F14;--surface:#12171F;--elev:#1A212B;--fg:#EDEDEF;--muted:#8A8F98;--subtle:#6B717A;--line:#2A3340;--accent:#C9A44C;--afg:#0B0F14;--uv:#9EC9D8;--paper:#F3EEE4;--ok:#27A644;--warn:#F59E0B;--bad:#E5484D}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--fg);font:12px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden}
+#top{height:38px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;background:var(--surface);border-bottom:1px solid var(--line);user-select:none}
+#top .brand{font-weight:600;letter-spacing:-.02em}
+#top .site{color:var(--muted);font-size:11px}
+#bar{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:5px 8px;background:var(--surface);border-bottom:1px solid var(--line)}
+#bar button,.tool,.job,.plate,select,button{background:transparent;color:var(--fg);border:1px solid transparent;border-radius:8px;padding:6px 8px;cursor:pointer;min-height:32px;-webkit-tap-highlight-color:transparent}
+#bar button,.primary,.ghost{cursor:pointer}
+#bar button:hover,.tool:hover{background:var(--elev)}
+#bar button:disabled{opacity:.35;pointer-events:none}
+.sep{width:1px;height:16px;background:var(--line);margin:0 4px}
+#wrap{display:grid;grid-template-columns:56px 1fr 280px;height:calc(100% - 72px);min-height:0}
+@media(max-width:900px){#wrap{grid-template-columns:56px 1fr} .rightp{display:none} #mbar{display:flex}}
+@media(max-width:420px){#wrap{grid-template-columns:1fr} .left{display:none}}
+.rail{background:var(--surface);padding:8px;overflow:auto}
+.left{border-right:1px solid var(--line)}.rightp{border-left:1px solid var(--line)}
+.toolgroup{display:flex;flex-direction:column;gap:4px}
+.tool{width:40px;height:36px;font-weight:600}
+.tool.on{background:var(--accent);color:var(--afg)}
+.hint{margin-top:12px;color:var(--muted);font-size:10px;line-height:1.45}
+#stagewrap{display:grid;grid-template-rows:1fr 24px;background:#0B0F14;min-width:0;min-height:0}
+#stage{overflow:hidden;position:relative;min-height:0}
+#view{display:block;width:100%;height:100%;touch-action:none;-webkit-user-select:none;user-select:none;cursor:default;contain:strict}
+#stat{display:flex;gap:14px;align-items:center;padding:0 10px;color:var(--muted);background:var(--bg);border-top:1px solid #000;font-size:11px;font-variant-numeric:tabular-nums}
+h3{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:12px 0 6px}
+label{display:block;margin:6px 0;color:var(--fg)}
+label input,label select{width:100%;margin-top:3px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:6px}
+.check{display:flex;align-items:center;gap:8px}.check input{width:auto}
+.plate,.job{display:flex;flex-direction:column;gap:2px;padding:6px 8px;border-radius:8px;cursor:pointer;text-align:left;width:100%;background:transparent;color:var(--fg);border:1px solid transparent}
+.plate{flex-direction:row;align-items:center;gap:8px}
+.plate.on,.job.on{background:var(--elev);border-color:rgba(201,164,76,.4)}
+.sw{width:11px;height:11px;border-radius:3px;border:1px solid #000}
+.warnings{list-style:none}.warnings li{padding:5px 0;border-bottom:1px solid var(--line);font-size:11px}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+.note{color:var(--muted);font-size:10px;margin-top:6px;line-height:1.45}
+#mbar{display:none;gap:4px;padding:8px;border-top:1px solid var(--line);background:var(--surface);overflow:auto}
+#welcome{position:fixed;inset:0;background:rgba(11,15,20,.72);display:flex;align-items:center;justify-content:center;z-index:20;padding:16px;pointer-events:auto}
+.card{max-width:420px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px}
+.card h2{font-size:20px;letter-spacing:-.03em;margin-bottom:8px}
+.card p,.card li{color:var(--muted);font-size:13px;line-height:1.5}
+.card ol{margin:12px 0 12px 18px}
+.primary{background:var(--accent);color:var(--afg);border:0;border-radius:10px;padding:10px 14px;cursor:pointer;font-weight:600}
+.ghost{background:transparent;color:var(--muted);border:0;margin-left:8px;cursor:pointer}
+#perfhud{display:none;position:absolute;top:8px;left:8px;z-index:12;min-width:220px;max-width:280px;padding:8px 10px;background:rgba(11,15,20,.88);border:1px solid var(--line);border-radius:10px;color:#d7dde6;font:11px/1.35 ui-monospace,Menlo,monospace;pointer-events:none}
+#perfhud.on{display:block}#perfhud b{color:var(--uv)}#perfhud .ok{color:var(--ok)}#perfhud .warn{color:var(--warn)}#perfhud .bad{color:var(--bad)}#perfhud .k{color:var(--muted)}
+</style>
 </head>
 <body>
-<p>Opening Spot Gloss Studio…</p>
-<p><a href="./Spot-Gloss-Studio.html" style="color:#C9A44C">Open the board</a></p>
+<input id="file" type="file" accept="image/svg+xml,.svg,image/png,.png,image/jpeg,.jpg,.jpeg,image/webp,.webp,image/gif,.gif,image/heic,.heic,application/json,.json" style="position:fixed;left:-9999px;width:1px;height:1px;opacity:0" />
+<header id="top">
+  <div class="brand">Spot Gloss Studio</div>
+  <div class="site">website · open in Safari</div>
+</header>
+<nav id="bar">
+  <button data-act="place">Place</button>
+  <button data-act="trace">Image Trace</button>
+  <button data-act="undo" disabled>Undo</button>
+  <button data-act="redo" disabled>Redo</button>
+  <span class="sep"></span>
+  <button data-act="expand">Expand</button>
+  <button data-act="outline">Outline Stroke</button>
+  <button data-act="offset">Offset</button>
+  <button data-act="simplify">Simplify</button>
+  <button data-act="unite">Unite</button>
+  <button data-act="minus">Minus Front</button>
+  <button data-act="reverse">Reverse Path</button>
+  <button data-act="choke">Choke UV</button>
+  <button data-act="spread">Spread White</button>
+  <button data-act="touv">Make Spot UV</button>
+  <span class="sep"></span>
+  <button data-act="save">Save</button>
+  <button data-act="export">Export Plates</button>
+  <button data-act="fit">Fit</button>
+  <button data-act="zoomout">−</button>
+  <button data-act="zoomin">+</button>
+  <button data-act="welcome">How to</button>
+</nav>
+<div id="wrap">
+  <aside class="rail left">
+    <div class="toolgroup">
+      <button class="tool on" data-tool="select">V</button>
+      <button class="tool" data-tool="direct">A</button>
+      <button class="tool" data-tool="pen">P</button>
+      <button class="tool" data-tool="convert">C</button>
+      <button class="tool" data-tool="add">+</button>
+      <button class="tool" data-tool="rect">M</button>
+      <button class="tool" data-tool="ell">O</button>
+      <button class="tool" data-tool="type">T</button>
+      <button class="tool" data-tool="hand">H</button>
+      <button class="tool" data-tool="zoom">Z</button>
+    </div>
+    <div class="hint">Trace is a draft.<br>Pen owns the plate.<br>This is a website.</div>
+  </aside>
+  <main id="stagewrap">
+    <div id="stage"><canvas id="view"></canvas></div>
+    <div id="stat"><span id="stool">Selection</span><span id="szoom">100%</span><span id="sdpr">1×</span><span id="smsg">Place art → Image Trace → Pen cleanup → Make Spot UV → Export</span></div>
+  </main>
+  <aside class="rail rightp">
+    <h3>VersaPanel</h3>
+    <p class="note">Roland TrueVIS LG-640 · VersaWorks 7 · 818 Stickers</p>
+    <h3>This browser</h3>
+    <p class="note" id="sandbox-note">Checking…</p>
+    <p class="note">Place, drop, or paste a logo. Export saves a zip to Downloads. Bookmark this page — do not download it.</p>
+    <h3>Packaging dielines</h3>
+    <select id="jar-sel"></select>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin:6px 0">
+      <button class="job on" data-jar-part="set">Wrap + lid</button>
+      <button class="job" data-jar-part="wrap">Wrap</button>
+      <button class="job" data-jar-part="lid">Lid</button>
+    </div>
+    <button class="primary" id="load-jar" style="width:100%;margin:4px 0">Load jar cut</button>
+    <select id="bag-sel"></select>
+    <button class="ghost" id="load-bag" style="width:100%;margin:4px 0;border:1px solid var(--line);border-radius:8px;padding:8px">Load bag cut</button>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:8px 0">
+      <label>Bleed <input id="p-bleedMm" type="number" min="1" max="8" step="0.5"></label>
+      <label>Safe <input id="p-safeMm" type="number" min="1" max="10" step="0.5"></label>
+      <label>Overlap <input id="p-overlapMm" type="number" min="3" max="16" step="0.5"></label>
+      <label>Eye W <input id="p-eyeWMm" type="number" min="6" max="16" step="0.5"></label>
+      <label>Eye H <input id="p-eyeHMm" type="number" min="3" max="10" step="0.5"></label>
+    </div>
+    <label class="check"><input type="checkbox" data-mark="cut" checked> CUT</label>
+    <label class="check"><input type="checkbox" data-mark="safe" checked> SAFE</label>
+    <label class="check"><input type="checkbox" data-mark="bleed" checked> BLEED</label>
+    <label class="check"><input type="checkbox" data-mark="eye" checked> CYE</label>
+    <label class="check"><input type="checkbox" data-mark="zipper" checked> ZIPPER</label>
+    <label class="check"><input type="checkbox" data-mark="crease" checked> CREASE</label>
+    <h3>Artboard</h3>
+    <label>Preset
+      <select id="preset">
+        <option value="card">Business card 3.5 × 2 in</option>
+        <option value="label">Label 3 × 3 in</option>
+        <option value="sticker" selected>Sticker 4 × 4 in</option>
+        <option value="og">OG card 4 × 5.5 in</option>
+      </select>
+    </label>
+    <h3>Image Trace</h3>
+    <label>Mode
+      <select id="trace-mode">
+        <option value="bw">Black and White Logo</option>
+        <option value="sil">Silhouette</option>
+        <option value="line">Line Art</option>
+      </select>
+    </label>
+    <label>Threshold <input type="range" id="thresh" min="20" max="220" value="128"></label>
+    <label>Corners <span id="corners-lab" style="color:var(--muted)">1.35 pt</span>
+      <input type="range" id="corners" min="0.4" max="4" step="0.1" value="1.35">
+    </label>
+    <label>Noise <input type="range" id="noise" min="4" max="80" value="16"></label>
+    <label class="check"><input type="checkbox" id="blur" checked> Smooth before trace</label>
+    <label class="check"><input type="checkbox" id="ignore-white" checked> Ignore white</label>
+    <h3>Plates</h3>
+    <div id="plates"></div>
+    <h3>Path</h3>
+    <p class="note" id="path-info">Select a path to inspect winding and fill rule.</p>
+    <label>Fill rule
+      <select id="fill-rule">
+        <option value="evenodd">even-odd (holes punch)</option>
+        <option value="nonzero">nonzero (winding / merge)</option>
+      </select>
+    </label>
+    <button class="ghost" data-act="reverse" style="width:100%;margin:4px 0;border:1px solid var(--line);border-radius:8px;padding:8px">Reverse path direction</button>
+    <h3>View</h3>
+    <label class="check"><input type="checkbox" id="raised" checked> Raised UV</label>
+    <label class="check"><input type="checkbox" id="seps"> Separations</label>
+    <label class="check"><input type="checkbox" id="outlinemode"> Outline (⌘Y)</label>
+    <label class="check"><input type="checkbox" id="grid"> Grid</label>
+    <label class="check"><input type="checkbox" id="snap" checked> Snap</label>
+    <label class="check"><input type="checkbox" id="showtmpl" checked> Template</label>
+    <label>Template opacity <input type="range" id="tmpl-op" min="5" max="90" value="42"></label>
+    <h3>Clean for press</h3>
+    <ul id="warnings" class="warnings"></ul>
+  </aside>
+</div>
+<div id="mbar">
+  <button class="tool on" data-tool="select">V</button>
+  <button class="tool" data-tool="pen">P</button>
+  <button class="tool" data-tool="rect">M</button>
+  <button class="tool" data-tool="ell">O</button>
+  <button class="tool" data-tool="hand">H</button>
+  <button data-act="place">Place</button>
+  <button data-act="touv">Spot UV</button>
+  <button data-act="export">Export</button>
+  <select id="m-pack" style="min-height:32px;max-width:42vw"></select>
+</div>
+<div id="welcome">
+  <div class="card">
+    <h2>Spot Gloss Studio</h2>
+    <p>This is a website. Bookmark the link. Do not download a file and do not install anything.</p>
+    <ol>
+      <li>Place a logo (PNG, JPG, or SVG). SVG keeps Pen cubics.</li>
+      <li>Image Trace is a draft. Pen (P) rebuilds the hero edge.</li>
+      <li>Make Spot UV, Choke 0.35 pt, then Export Plates (zip goes to Downloads).</li>
+      <li>Open those SVGs in Illustrator for 818 Stickers / VersaWorks 7.</li>
+    </ol>
+    <p>Safari on a regular MacBook, or Chrome on Windows. Same board.</p>
+    <button class="primary" id="go">Start</button>
+    <button class="ghost" id="skip">Skip</button>
+  </div>
+</div>
+<script src="./studio.js"></script>
 </body>
 </html>
