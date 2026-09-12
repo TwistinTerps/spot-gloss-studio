@@ -1,15 +1,13 @@
-# Spot Gloss Studio — Mac (Safari)
+# Spot Gloss Studio for Mac
 
-Adobe-vector UV studio. One HTML file. No install.
+One HTML file. Open in Safari. Affine Place SVG (last row `[0 0 1]`), Pen cleanup, raised UV plates.
 
-## Direct download
+## Open in Safari (email this)
 
-https://github.com/TwistinTerps/spot-gloss-studio/releases/latest/download/Spot-Gloss-Studio.html
+https://cdn.jsdelivr.net/gh/TwistinTerps/spot-gloss-studio@main/Spot-Gloss-Studio.html
 
-1. Tap the link. It saves `Spot-Gloss-Studio.html`.
-2. Double-click it. Safari opens it.
-3. If Mac blocks it: right-click → Open With → Safari.
+Or download: https://github.com/TwistinTerps/spot-gloss-studio/raw/main/Spot-Gloss-Studio.html
 
-Works on a regular MacBook / Air / Pro. Safari only.
+Right-click → Open With → Safari if macOS blocks it.
 
-Place a PNG, JPG, or SVG logo. Image Trace is a draft — Pen (P) is the plate. Export Plates puts a zip in Downloads for Illustrator.
+Place SVG keeps Illustrator cubics. Image Trace is a draft. Export Plates → zip in Downloads.
