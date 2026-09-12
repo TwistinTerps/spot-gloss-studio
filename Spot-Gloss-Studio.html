@@ -300,6 +300,20 @@ label input,label select{width:100%;margin-top:3px;background:var(--bg);color:va
   function reverseContour(nodes){ const out=nodes.slice().reverse(); out.forEach(n=>{ const ix=n.ix,iy=n.iy; n.ix=n.ox; n.iy=n.oy; n.ox=ix; n.oy=iy; }); return out; }
   function reversePath(p){ p.nodes=reverseContour(p.nodes); if(p.holes) p.holes=p.holes.map(reverseContour); }
   function selectedPaths(){return state.paths.filter(p=>state.selected.includes(p.id));}
+  function selectedArt(){ return state.paths.filter(p=>state.selected.includes(p.id)&&!p.locked&&(!p.kind||p.kind==="art")); }
+  let pathClip=[];
+  function shiftNodes(p,dx,dy){
+    (p.nodes||[]).forEach(n=>{ n.x+=dx; n.y+=dy; n.ix+=dx; n.iy+=dy; n.ox+=dx; n.oy+=dy; });
+    (p.holes||[]).forEach(h=>h.forEach(n=>{ n.x+=dx; n.y+=dy; n.ix+=dx; n.iy+=dy; n.ox+=dx; n.oy+=dy; }));
+  }
+  function isTypingTarget(el){
+    if(!el||!el.tagName) return false;
+    if(el.isContentEditable) return true;
+    if(el.tagName==="TEXTAREA") return true;
+    if(el.tagName!=="INPUT") return false;
+    const type=(el.type||"text").toLowerCase();
+    return ["text","search","email","url","password","number","tel"].indexOf(type)>=0;
+  }
   function duplicate(){
     const sel=selectedPaths().filter(p=>!p.locked);
     if(!sel.length){ setMsg("Select a path to duplicate"); return; }
@@ -1210,6 +1224,31 @@ ${new Date().toISOString()}
     if(name==="fit"){ fitInView(); draw(); }
     if(name==="zoomin") zoomBy(1.25);
     if(name==="zoomout") zoomBy(1/1.25);
+    if(name==="selectAll"){
+      state.selected=state.paths.filter(p=>!p.locked&&(!p.kind||p.kind==="art")&&p.visible).map(p=>p.id);
+      setMsg(state.selected.length?("Selected "+state.selected.length+" path(s)"):"No artwork to select — Place a logo");
+      inspect(); draw(); return;
+    }
+    if(name==="deselect"){ state.selected=[]; setMsg("Deselected"); inspect(); draw(); return; }
+    if(name==="delete"){
+      const ids=new Set(selectedArt().map(p=>p.id));
+      if(!ids.size){ setMsg("Click your artwork first"); return; }
+      snapshot(); state.paths=state.paths.filter(p=>!ids.has(p.id)); state.selected=[]; setMsg("Deleted"); inspect(); draw(); return;
+    }
+    if(name==="copy"){
+      pathClip=selectedArt().map(p=>JSON.parse(JSON.stringify(p)));
+      if(!pathClip.length){ setMsg("Click your artwork first"); return; }
+      try{ navigator.clipboard.writeText(JSON.stringify({sgs:1,paths:pathClip})); }catch(err){}
+      setMsg("Copied "+pathClip.length+" path(s)"); return;
+    }
+    if(name==="cut"){ act("copy"); act("delete"); return; }
+    if(name==="pastePaths"){
+      if(!pathClip.length){ setMsg("Clipboard has no paths — copy art first"); return; }
+      snapshot();
+      const copies=pathClip.map(p=>{ const c=JSON.parse(JSON.stringify(p)); c.id=uid(); shiftNodes(c,8,8); return c; });
+      pathClip=copies.map(c=>JSON.parse(JSON.stringify(c)));
+      state.paths=state.paths.concat(copies); state.selected=copies.map(c=>c.id); setMsg("Pasted "+copies.length+" path(s)"); inspect(); draw(); return;
+    }
     if(name==="welcome") document.getElementById("welcome").style.display="flex";
   }
 
@@ -1335,20 +1374,43 @@ ${new Date().toISOString()}
   canvas.addEventListener("gesturestart", e=>{ e.preventDefault(); gestureZ=state.zoom; });
   canvas.addEventListener("gesturechange", e=>{ e.preventDefault(); zoomAround(e.clientX||0, e.clientY||0, gestureZ*(e.scale||1)); draw(); });
   window.addEventListener("keydown", e=>{
-    const t=e.target; if(t && (t.tagName==="INPUT"||t.tagName==="TEXTAREA"||t.tagName==="SELECT")) return;
-    if(e.code==="Space"){ state.space=true; e.preventDefault(); }
-    const k=e.key.toLowerCase(), meta=e.metaKey||e.ctrlKey;
-    if(!meta){ const map={v:"select",a:"direct",p:"pen",c:"convert",h:"hand",z:"zoom",m:"rect",o:"ell",t:"type"}; if(map[k]) setTool(map[k]); if(k==="+"||k==="=") setTool("add"); }
-    if(meta && (k==="="||k==="+"||e.code==="NumpadAdd")){ e.preventDefault(); zoomBy(1.25); }
-    if(meta && (k==="-"||e.code==="Minus"||e.code==="NumpadSubtract")){ e.preventDefault(); zoomBy(1/1.25); }
-    if(meta && k==="1"){ e.preventDefault(); const r=canvas.getBoundingClientRect(); zoomAround(r.left+r.width/2, r.top+r.height/2, 1); draw(); }
-    if(meta && k==="z"){ e.preventDefault(); e.shiftKey?redo():undo(); }
-    if(meta && k==="y"){ e.preventDefault(); state.outline=!state.outline; document.getElementById("outlinemode").checked=state.outline; draw(); }
-    if(meta && k==="d"){ e.preventDefault(); duplicate(); }
-    if(meta && k==="0"){ e.preventDefault(); fitInView(); draw(); }
-    if(k==="escape"){ state.draft=null; draw(); }
-    if(k==="enter" && state.draft && state.draft.nodes.length>1){ snapshot(); state.paths.push(state.draft); state.selected=[state.draft.id]; state.draft=null; inspect(); draw(); }
-    if(k==="backspace"||k==="delete"){ snapshot(); state.paths=state.paths.filter(p=>p.locked||!state.selected.includes(p.id)); state.selected=[]; inspect(); draw(); }
+    const t=e.target; if(isTypingTarget(t)) return;
+    const k=(e.key||"").toLowerCase(), meta=e.metaKey||e.ctrlKey, shift=e.shiftKey;
+    if(e.code==="Space"){ state.space=true; e.preventDefault(); return; }
+    if(meta && k==="z"){ e.preventDefault(); shift?redo():undo(); return; }
+    if(meta && k==="y"){ e.preventDefault(); if(shift) redo(); else { state.outline=!state.outline; const o=document.getElementById("outlinemode"); if(o) o.checked=state.outline; draw(); } return; }
+    if(meta && k==="d"){ e.preventDefault(); duplicate(); return; }
+    if(meta && k==="s"){ e.preventDefault(); act("save"); return; }
+    if(meta && k==="e"){ e.preventDefault(); act("export"); return; }
+    if(meta && k==="o"){ e.preventDefault(); act(shift?"outline":"place"); return; }
+    if(meta && k==="i"){ e.preventDefault(); act("place"); return; }
+    if(meta && k==="a"){ e.preventDefault(); act(shift?"deselect":"selectAll"); return; }
+    if(meta && k==="c"){ e.preventDefault(); act("copy"); return; }
+    if(meta && k==="x"){ e.preventDefault(); act("cut"); return; }
+    if(meta && k==="v"){ return; }
+    if(meta && k==="t" && shift){ e.preventDefault(); act("trace"); return; }
+    if(meta && k==="u"){ e.preventDefault(); act("touv"); return; }
+    if(meta && k==="k"){ e.preventDefault(); act("choke"); return; }
+    if(meta && (k==="="||k==="+"||e.code==="NumpadAdd")){ e.preventDefault(); zoomBy(1.25); return; }
+    if(meta && (k==="-"||e.code==="Minus"||e.code==="NumpadSubtract")){ e.preventDefault(); zoomBy(1/1.25); return; }
+    if(meta && k==="1"){ e.preventDefault(); const r=canvas.getBoundingClientRect(); zoomAround(r.left+r.width/2, r.top+r.height/2, 1); draw(); return; }
+    if(meta && k==="0"){ e.preventDefault(); fitInView(); draw(); return; }
+    if(!meta){
+      const map={v:"select",a:"direct",p:"pen",c:"convert",h:"hand",z:"zoom",m:"rect",o:"ell",t:"type"};
+      if(map[k]){ e.preventDefault(); setTool(map[k]); }
+      if(k==="+"||k==="="){ e.preventDefault(); setTool("add"); }
+      if(k==="u"){ e.preventDefault(); act("touv"); }
+      if(k==="["){ e.preventDefault(); act("choke"); }
+      if(k==="]"){ e.preventDefault(); act("spread"); }
+      const step=shift?10:1;
+      if(e.code==="ArrowLeft"){ e.preventDefault(); if(selectedArt().length){ snapshot(); selectedArt().forEach(p=>shiftNodes(p,-step,0)); draw(); } }
+      if(e.code==="ArrowRight"){ e.preventDefault(); if(selectedArt().length){ snapshot(); selectedArt().forEach(p=>shiftNodes(p,step,0)); draw(); } }
+      if(e.code==="ArrowUp"){ e.preventDefault(); if(selectedArt().length){ snapshot(); selectedArt().forEach(p=>shiftNodes(p,0,-step)); draw(); } }
+      if(e.code==="ArrowDown"){ e.preventDefault(); if(selectedArt().length){ snapshot(); selectedArt().forEach(p=>shiftNodes(p,0,step)); draw(); } }
+    }
+    if(k==="escape"){ e.preventDefault(); state.draft=null; act("deselect"); }
+    if(k==="enter" && state.draft && state.draft.nodes.length>1){ e.preventDefault(); snapshot(); state.paths.push(state.draft); state.selected=[state.draft.id]; state.draft=null; inspect(); draw(); }
+    if(k==="backspace"||k==="delete"){ e.preventDefault(); act("delete"); }
   });
   window.addEventListener("keyup", e=>{ if(e.code==="Space") state.space=false; });
   function onDrop(e){
@@ -1363,8 +1425,13 @@ ${new Date().toISOString()}
   canvas.addEventListener("dragover", e=>e.preventDefault());
   canvas.addEventListener("drop", onDrop);
   window.addEventListener("paste", e=>{
-    const t=e.target; if(t && (t.tagName==="INPUT"||t.tagName==="TEXTAREA"||t.tagName==="SELECT")) return;
+    const t=e.target; if(isTypingTarget(t)) return;
     const cd=e.clipboardData; if(!cd) return;
+    const raw=cd.getData("text/plain")||"";
+    try{
+      const d=JSON.parse(raw);
+      if(d&&d.sgs&&Array.isArray(d.paths)&&d.paths.length){ e.preventDefault(); pathClip=d.paths; act("pastePaths"); return; }
+    }catch(err){}
     const markup=extractSvgMarkup(cd.getData("text/plain")||cd.getData("text/html")||"");
     if(markup){ e.preventDefault(); const imported=importSvgDocument(markup, state.plate, state.artboard); if(!imported.length){ setMsg("No path data in that SVG"); return; } snapshot(); state.paths=state.paths.concat(imported); state.selected=imported.slice(0,1).map(p=>p.id); setMsg("Placed "+imported.length+" SVG path(s) · cubics kept · fitted to board"+svgPlaceExtra()); inspect(); draw(); return; }
     if(cd.files && cd.files.length){ e.preventDefault(); placeFile(cd.files[0]); return; }
@@ -1376,8 +1443,8 @@ ${new Date().toISOString()}
       if(item.type && item.type.indexOf("image/")===0){ const f=item.getAsFile(); if(f){ e.preventDefault(); placeFile(f); setMsg("Pasted image · Image Trace, then Pen the hero edges"); } return; }
     }
   });
-  document.getElementById("bar").addEventListener("click", e=>{ const a=e.target.closest("[data-act]"); if(a&&a.dataset.act) act(a.dataset.act); });
-  document.getElementById("mbar").addEventListener("click", e=>{ const a=e.target.closest("[data-act]"); if(a&&a.dataset.act) act(a.dataset.act); if(e.target.dataset.tool) setTool(e.target.dataset.tool); });
+  document.getElementById("bar").addEventListener("click", e=>{ const a=e.target.closest("[data-act]"); if(a&&a.dataset.act){ act(a.dataset.act); a.blur(); } });
+  document.getElementById("mbar").addEventListener("click", e=>{ const a=e.target.closest("[data-act]"); if(a&&a.dataset.act){ act(a.dataset.act); a.blur(); } if(e.target.dataset.tool) setTool(e.target.dataset.tool); });
   document.querySelector(".rightp").addEventListener("click", e=>{ const a=e.target.closest("[data-act]"); if(a&&a.dataset.act) act(a.dataset.act); });
   document.querySelectorAll(".left .tool").forEach(b=>b.onclick=()=>setTool(b.dataset.tool));
   fileInput.onchange=()=>{ if(fileInput.files[0]) placeFile(fileInput.files[0]); fileInput.value=""; };
