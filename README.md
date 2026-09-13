@@ -1,7 +1,7 @@
 # Spot Gloss Studio
 
-This is a **website**. She opens the link in Safari. Do not email a file. Do not install an app.
+Website: https://spot-gloss-studio.vercel.app
 
-**Send her this:** https://spot-gloss-studio.vercel.app
+Open in Safari. Bookmark the link. Do not download a file.
 
-Bookmark the page. Place a logo. Image Trace is a draft. Pen owns the plate. Export Plates downloads a zip.
+If the page is blank, use Open board on the top right.
