@@ -1,6 +1,98 @@
 <!DOCTYPE html>
-<meta charset="UTF-8">
-<meta http-equiv="refresh" content="0;url=./board.html">
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<meta name="color-scheme" content="dark"/>
 <title>Spot Gloss Studio</title>
-<script>location.replace('./board.html'+location.search+location.hash)</script>
-<p><a href="./board.html">Open Spot Gloss Studio</a></p>
+<style>
+:root{--bg:#0B0F14;--surface:#12171F;--elev:#1A212B;--fg:#EDEDEF;--muted:#8A8F98;--line:#2A3340;--accent:#C9A44C;--afg:#0B0F14;--uv:#9EC9D8;--ok:#27A644;--warn:#F59E0B;--bad:#E5484D}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--fg);font:12px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;overflow:hidden}
+#top{height:36px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;background:var(--surface);border-bottom:1px solid var(--line)}
+#top b{letter-spacing:-.02em}
+#top .v{color:var(--muted);font-size:11px}
+#bar{display:flex;flex-wrap:wrap;gap:3px;align-items:center;padding:4px 8px;background:var(--surface);border-bottom:1px solid var(--line)}
+#bar button,.tool,select,button{background:transparent;color:var(--fg);border:1px solid transparent;border-radius:8px;padding:6px 8px;cursor:pointer;min-height:32px}
+#bar button:hover,.tool:hover{background:var(--elev)}
+.sep{width:1px;height:16px;background:var(--line);margin:0 4px}
+#wrap{display:grid;grid-template-columns:52px 1fr 260px;height:calc(100% - 68px);min-height:0}
+@media(max-width:860px){#wrap{grid-template-columns:52px 1fr}#side{display:none}}
+.rail{background:var(--surface);padding:8px;overflow:auto}
+.left{border-right:1px solid var(--line)}
+#side{border-left:1px solid var(--line)}
+.tool{width:36px;height:34px;font-weight:700}
+.tool.on{background:var(--accent);color:var(--afg)}
+#stage{min-width:0;min-height:0;position:relative;overflow:hidden}
+#view{display:block;width:100%;height:100%;touch-action:none;user-select:none}
+#stat{position:absolute;left:0;right:0;bottom:0;height:22px;display:flex;gap:12px;align-items:center;padding:0 10px;color:var(--muted);background:rgba(11,15,20,.92);font-size:11px;pointer-events:none}
+h3{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:12px 0 6px}
+label{display:block;margin:6px 0}
+label input,label select{width:100%;margin-top:3px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:6px}
+.primary{background:var(--accent);color:var(--afg);border:0;border-radius:10px;padding:8px 12px;width:100%;font-weight:600}
+.note{color:var(--muted);font-size:10px;line-height:1.45;margin:6px 0}
+.check{display:flex;align-items:center;gap:8px}
+.check input{width:auto}
+.job{padding:6px;border-radius:8px;border:1px solid transparent;width:100%;text-align:left}
+.job.on{background:var(--elev);border-color:rgba(201,164,76,.4)}
+</style>
+</head>
+<body>
+<input id="file" type="file" accept=".svg,.png,.jpg,.jpeg,.webp,.json,image/*" hidden/>
+<header id="top"><b>Spot Gloss Studio</b><span class="v">website · Safari · v2026.09.13</span></header>
+<nav id="bar">
+  <button data-act="place">Place</button>
+  <button data-act="trace">Image Trace</button>
+  <button data-act="undo" type="button">Undo</button>
+  <button data-act="redo" type="button">Redo</button>
+  <span class="sep"></span>
+  <button data-act="outline">Outline Stroke</button>
+  <button data-act="unite">Unite</button>
+  <button data-act="minus">Minus Front</button>
+  <button data-act="reverse">Reverse</button>
+  <button data-act="choke">Choke UV</button>
+  <button data-act="touv">Make Spot UV</button>
+  <span class="sep"></span>
+  <button data-act="save">Save</button>
+  <button data-act="export">Export Plates</button>
+  <button data-act="fit">Fit</button>
+  <button data-act="zoomout">−</button>
+  <button data-act="zoomin">+</button>
+</nav>
+<div id="wrap">
+  <aside class="rail left">
+    <button class="tool on" data-tool="select" title="V">V</button>
+    <button class="tool" data-tool="direct" title="A">A</button>
+    <button class="tool" data-tool="pen" title="P">P</button>
+    <button class="tool" data-tool="rect" title="M">M</button>
+    <button class="tool" data-tool="ell" title="O">O</button>
+    <button class="tool" data-tool="hand" title="H">H</button>
+    <button class="tool" data-tool="zoom" title="Z">Z</button>
+    <p class="note">Trace is a draft.<br>Pen owns the plate.</p>
+  </aside>
+  <main id="stage"><canvas id="view"></canvas><div id="stat"><span id="stool">Selection</span><span id="szoom">100%</span><span id="smsg">Place a logo, Pen the edge, Make Spot UV, Export</span></div></main>
+  <aside class="rail" id="side">
+    <h3>Packaging</h3>
+    <select id="jar-sel"></select>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin:6px 0">
+      <button class="job on" data-part="set">Wrap+lid</button>
+      <button class="job" data-part="wrap">Wrap</button>
+      <button class="job" data-part="lid">Lid</button>
+    </div>
+    <button class="primary" id="load-jar">Load jar cut</button>
+    <select id="bag-sel" style="margin-top:8px"></select>
+    <button id="load-bag" style="width:100%;margin-top:6px;border:1px solid var(--line)">Load bag cut</button>
+    <h3>Trace</h3>
+    <label>Threshold <input id="thresh" type="range" min="20" max="220" value="128"></label>
+    <label>Simplify <input id="corners" type="range" min="0.4" max="4" step="0.1" value="1.4"></label>
+    <h3>View</h3>
+    <label class="check"><input id="raised" type="checkbox" checked> Raised UV</label>
+    <label class="check"><input id="grid" type="checkbox"> Grid</label>
+    <label class="check"><input id="snap" type="checkbox" checked> Snap</label>
+    <p class="note" id="path-info">Select a path for winding / fill rule.</p>
+    <p class="note">Print · Spot UV 100% K overprint · White · Die. Bookmark this page. Do not download a file.</p>
+  </aside>
+</div>
+<script src="./board.js"></script>
+</body>
+</html>
